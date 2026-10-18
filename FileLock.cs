@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Management;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -158,15 +159,22 @@ internal static class Program
 
                 try
                 {
-                    using (Process process = Process.GetProcessById(pid))
+                    string commandLine = GetCommandLine(pid);
+
+                    if (!String.IsNullOrEmpty(commandLine))
                     {
-                        Console.WriteLine(process.MainModule.FileName);
+                        Console.WriteLine(commandLine);
+                    }
+                    else
+                    {
+                        Console.WriteLine(
+                            "command line unavailable; " + GetExecutablePath(pid));
                     }
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine(
-                        "executable path unavailable ({0})", ex.Message);
+                        "process details unavailable ({0})", ex.Message);
                 }
             }
 
@@ -231,5 +239,35 @@ internal static class Program
 
         throw new InvalidOperationException(
             "The process list changed repeatedly while it was being read.");
+    }
+
+    private static string GetCommandLine(int pid)
+    {
+        string query =
+            "SELECT CommandLine FROM Win32_Process WHERE ProcessId = " + pid;
+
+        using (var searcher = new ManagementObjectSearcher(
+            @"\\.\root\CIMV2",
+            query))
+        using (ManagementObjectCollection results = searcher.Get())
+        {
+            foreach (ManagementObject item in results)
+            {
+                using (item)
+                {
+                    return item["CommandLine"] as string;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string GetExecutablePath(int pid)
+    {
+        using (Process process = Process.GetProcessById(pid))
+        {
+            return process.MainModule.FileName;
+        }
     }
 }
